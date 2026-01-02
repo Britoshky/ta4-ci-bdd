@@ -9,7 +9,7 @@
 
   <properties>
     <!-- Compatible con GitHub Actions (Java 21), ajustado para entorno local -->
-    <maven.compiler.release>21</maven.compiler.release>
+    <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
