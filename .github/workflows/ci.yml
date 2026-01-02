@@ -7,59 +7,62 @@ on:
     branches: [ "main" ]
 
 jobs:
-  pipeline:
+  test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-          cache: maven
-
-      - name: Build + Unit + BDD tests (generan reportes)
+      - name: Build and test
         run: mvn -B clean test
-
-      - name: Install k6
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gnupg ca-certificates
-          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update
-          sudo apt-get install -y k6
-
-      - name: Start local server (background)
-        run: |
-          nohup mvn -q -DskipTests exec:java -Dexec.mainClass=cl.iplacex.ta4.perf.SimpleLoginServer > server.log 2>&1 &
-          sleep 2
-          curl -sS http://localhost:8080/health
-
-      - name: Run k6 performance test (with thresholds)
-        run: k6 run perf/k6-login.js
-
-      - name: Upload surefire reports (JUnit)
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: surefire-reports
           path: target/surefire-reports
-
-      - name: Upload cucumber html report
+      - name: Upload cucumber report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cucumber-html-report
           path: target/cucumber-html-report
 
+  perf:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install k6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y k6
+      - name: Start server
+        run: |
+          nohup mvn -q -DskipTests exec:java -Dexec.mainClass=cl.iplacex.ta4.perf.SimpleLoginServer > server.log 2>&1 &
+          for i in {1..15}; do
+            sleep 2
+            if curl -sS http://localhost:8080/health; then
+              echo "Server is up!"
+              break
+            fi
+            echo "Waiting for server..."
+          done
+      - name: Run k6
+        run: k6 run perf/k6-login.js
       - name: Upload perf logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: perf-and-server-logs
-          path: |
-            server.log
+          path: server.log
