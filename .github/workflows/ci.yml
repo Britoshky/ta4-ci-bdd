@@ -43,6 +43,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Compile code
+        run: mvn -B clean compile
       - name: Install k6
         run: |
           sudo apt-get update
@@ -53,15 +55,22 @@ jobs:
           sudo apt-get install -y k6
       - name: Start server
         run: |
-          nohup mvn -q -DskipTests exec:java -Dexec.mainClass=cl.iplacex.ta4.perf.SimpleLoginServer > server.log 2>&1 &
+          echo "Starting server..."
+          java -cp target/classes cl.iplacex.ta4.perf.SimpleLoginServer > server.log 2>&1 &
+          echo "Waiting for server to be ready..."
           for i in {1..15}; do
-            sleep 2
-            if curl -sS http://localhost:8080/health; then
-              echo "Server is up!"
+            if curl -f -sS http://localhost:8080/health > /dev/null 2>&1; then
+              echo "✓ Server is up and responding!"
               break
             fi
-            echo "Waiting for server..."
+            echo "Attempt $i/15: Server not ready yet..."
+            sleep 2
           done
+          if ! curl -f -sS http://localhost:8080/health > /dev/null 2>&1; then
+            echo "ERROR: Server failed to start. Logs:"
+            cat server.log
+            exit 1
+          fi
       - name: Run k6
         run: k6 run perf/k6-login.js
       - name: Upload perf logs
